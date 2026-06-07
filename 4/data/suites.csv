@@ -1,0 +1,8 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","385","deve buscar post por ID","","2026-06-07","passed","2026-06-07","Posts","public-api.spec.ts","",""
+"","426","deve retornar 100 posts","","2026-06-07","passed","2026-06-07","Posts","public-api.spec.ts","",""
+"","30","deve filtrar comentários por postId","","2026-06-07","passed","2026-06-07","Comentários","public-api.spec.ts","",""
+"","33","usuário deve ter campos obrigatórios","","2026-06-07","passed","2026-06-07","Usuários","public-api.spec.ts","",""
+"","20","deve listar 10 usuários","","2026-06-07","passed","2026-06-07","Usuários","public-api.spec.ts","",""
+"","25","deve retornar 404 para post inexistente","","2026-06-07","passed","2026-06-07","Posts","public-api.spec.ts","",""
+"","32","deve retornar 404 para usuário inexistente","","2026-06-07","passed","2026-06-07","Usuários","public-api.spec.ts","",""
