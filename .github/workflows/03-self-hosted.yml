@@ -36,64 +36,49 @@
 
 name: "03 - Self-Hosted Runner (App Interno)"
 
-# gatilhos / triggers
 on:
-  # disparo manual — ideal para demonstrar o runner sem necessitar de push
   workflow_dispatch:
 
 jobs:
 
   testes-app-local:
     name: Testes App Interno (localhost:3000)
-
-    # a mudança fundamental: runs-on: self-hosted
-    # o GitHub vai enviar este job para um runner registrado por você,
-    # em vez de usar a infraestrutura cloud do GitHub
     runs-on: self-hosted
-
-    # tempo máximo para o job inteiro — evita runners travados consumindo recursos
     timeout-minutes: 30
 
+    defaults:
+      run:
+        # garante que todos os steps usam cmd.exe no Windows
+        # evita conflito com política de execução do PowerShell no self-hosted
+        shell: cmd
+        working-directory: ${{ github.workspace }}
+
     steps:
-      # clonar o repositório na máquina do runner
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      # configurar o Node.js (o runner pode já ter uma versão instalada,
-      # mas esta action garante a versão exata do projeto)
       - name: Configurar Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # instalar dependências
-      # em runners self-hosted, o node_modules pode ser cacheado entre builds
       - name: Instalar dependências
         run: npm ci
 
-      # instalar o browser Chromium para o Playwright
       # sem --with-deps pois as dependências de sistema já estão na máquina
       - name: Instalar browsers do Playwright
         run: npx playwright install chromium
 
-      # executar TODOS os testes usando o config local
-      # o playwright.local.config.ts tem webServer configurado:
-      #   → sobe o app Express em localhost:3000 antes dos testes
-      #   → derruba automaticamente ao terminar
-      # isso inclui: public-api.spec.ts + local-app.spec.ts
-      # o local-app.spec.ts FALHA em runners cloud — funciona aqui
+      # playwright.local.config.ts tem webServer que sobe o app em localhost:3000
+      # automaticamente antes dos testes e derruba ao terminar
       - name: Executar todos os testes (API pública + App interno)
         run: npm run test:local
 
-      # gerar relatório Allure localmente
-      # & é o operador de chamada do PowerShell para executar .cmd com caminho relativo
-      # continue-on-error: true pois allure-results pode estar vazio se os testes falharam
+      # allure-commandline requer Java — disponível na máquina do runner
       - name: Gerar Allure Report
         if: always()
-        continue-on-error: true
-        run: & ".\node_modules\.bin\allure.cmd" generate allure-results --clean -o allure-report
+        run: npm run allure:generate
 
-      # publicar relatório HTML do Playwright como artefato
       - name: Upload relatório HTML do Playwright
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,7 +87,6 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      # publicar relatório Allure como artefato
       - name: Upload Allure Report
         if: always()
         uses: actions/upload-artifact@v4
