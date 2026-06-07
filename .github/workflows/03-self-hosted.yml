@@ -86,12 +86,13 @@ jobs:
         run: npm run test:local
 
       # gerar relatório Allure localmente
-      # shell: cmd evita conflito com política de execução do PowerShell no Windows
-      # o allure-commandline usa .cmd no Windows — funciona sem restrições via cmd.exe
+      # Bypass -Scope Process: libera scripts apenas para este step,
+      # sem alterar política global do Windows
       - name: Gerar Allure Report
         if: always()
-        shell: cmd
-        run: npm run allure:generate
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          npm run allure:generate
 
       # publicar relatório HTML do Playwright como artefato
       - name: Upload relatório HTML do Playwright
