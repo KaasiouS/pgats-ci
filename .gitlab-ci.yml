@@ -90,6 +90,10 @@ testes-api-publica:
 gerar-allure-report:
   stage: report
   needs: [testes-api-publica]
+  # o Allure CLI é um binário Java — a imagem do Playwright não tem Java,
+  # então instalamos o JRE antes de rodar o allure generate
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq default-jre
   script:
     - npm run allure:generate
     - echo "Relatório Allure gerado em allure-report/"
@@ -107,6 +111,8 @@ gerar-allure-report:
 pages:
   stage: report
   needs: [testes-api-publica]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq default-jre
   script:
     - npm run allure:generate
     - mv allure-report public
