@@ -1,0 +1,124 @@
+# Testes Paralelos — Matrix Strategy + Playwright Sharding
+#
+# O problema que isso resolve:
+#   À medida que a suíte cresce, executar todos os testes em sequência
+#   em um único job aumenta o tempo de feedback. Com sharding, dividimos
+#   os testes em N fatias e cada fatia roda em um job independente
+#   (e simultâneo). O tempo total cai proporcionalmente ao número de shards.
+#
+# Como funciona:
+#   1. O job "executar-shard" usa matrix strategy com 3 variantes.
+#      O GitHub Actions cria 3 jobs simultaneamente, cada um recebendo
+#      um valor diferente de matrix.shard (1, 2 ou 3).
+#   2. Cada job executa: npx playwright test --shard=N/3
+#      O Playwright divide os specs igualmente entre os shards.
+#   3. Cada job salva seu resultado no formato "blob" como artefato.
+#   4. O job "consolidar-relatorio" aguarda os 3 terminarem, baixa
+#      todos os blobs e os mescla em um único relatório HTML.
+#
+# fail-fast: false → se um shard falhar, os outros continuam rodando.
+# Sem isso, uma falha em qualquer shard cancelaria os demais.
+#
+# Quando usar sharding na vida real?
+#   ✅ Suítes com 100+ testes onde o feedback demora mais de 5 minutos
+#   ✅ Quando os testes são independentes entre si (sem estado compartilhado)
+#   ✅ Para balancear carga em runners com recursos limitados
+
+name: "04 - Testes Paralelos (Matrix + Sharding)"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Fase 1: execução paralela em shards ────────────────────────────────
+  executar-shard:
+    name: "Shard ${{ matrix.shard }} / 3"
+    runs-on: ubuntu-latest
+
+    strategy:
+      # false: se 1 shard falhar, os outros 2 continuam executando
+      fail-fast: false
+      matrix:
+        # 3 jobs paralelos — cada um recebe um valor diferente de "shard"
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar browsers do Playwright
+        run: npx playwright install --with-deps chromium
+
+      # executa apenas 1/3 dos testes neste job
+      # --reporter=blob gera um arquivo binário compacto para ser mesclado depois
+      - name: Executar shard ${{ matrix.shard }} de 3
+        run: npx playwright test --shard=${{ matrix.shard }}/3 --reporter=blob
+
+      # salva o resultado do shard como artefato temporário (1 dia)
+      # o job de consolidação vai baixar os 3 blobs para gerar o relatório final
+      - name: Salvar resultado do shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-shard-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
+
+  # ── Fase 2: consolidação dos resultados ───────────────────────────────
+  consolidar-relatorio:
+    name: Consolidar Relatório Final
+    needs: executar-shard
+
+    # always() garante que o relatório seja gerado mesmo se algum shard falhou
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # baixa os 3 blobs gerados pelos shards para a pasta blob-reports/
+      - name: Baixar todos os blobs dos shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-shard-*
+          merge-multiple: true
+          path: blob-reports/
+
+      # mescla os 3 blobs em um único relatório HTML + JUnit
+      - name: Mesclar relatórios e gerar HTML consolidado
+        run: npx playwright merge-reports --reporter=html,junit blob-reports/
+
+      # publica o relatório final como artefato permanente
+      - name: Upload do relatório consolidado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-paralelo-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 14

@@ -1,93 +1,172 @@
-# pgats-ci
+# CI/CD com Playwright — Pós-graduação PGTS
 
+Projeto da atividade extra da disciplina **04 — Integração Contínua para Automação de Testes**.  
+Demonstra na prática os principais conceitos de CI/CD aplicados à automação de testes com Playwright.
 
+## Status dos Workflows
 
-## Getting started
+| Workflow | Status |
+|----------|--------|
+| 01 - Execução Cloud | [![Execução Cloud](https://github.com/KaasiouS/pgats-ci/actions/workflows/01-execucao-cloud.yml/badge.svg)](https://github.com/KaasiouS/pgats-ci/actions/workflows/01-execucao-cloud.yml) |
+| 02 - Com Relatório | [![Com Relatório](https://github.com/KaasiouS/pgats-ci/actions/workflows/02-com-relatorio.yml/badge.svg)](https://github.com/KaasiouS/pgats-ci/actions/workflows/02-com-relatorio.yml) |
+| 03 - Self-Hosted | [![Self-Hosted](https://github.com/KaasiouS/pgats-ci/actions/workflows/03-self-hosted.yml/badge.svg)](https://github.com/KaasiouS/pgats-ci/actions/workflows/03-self-hosted.yml) |
+| 04 - Paralelo | [![Testes Paralelos](https://github.com/KaasiouS/pgats-ci/actions/workflows/04-paralelo.yml/badge.svg)](https://github.com/KaasiouS/pgats-ci/actions/workflows/04-paralelo.yml) |
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Exercícios
 
-## Add your files
+### Exercício 1 — Pipeline em outra plataforma de CI (GitLab CI)
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Arquivo: [`.gitlab-ci.yml`](.gitlab-ci.yml)
+
+Replica a pipeline do GitHub Actions no **GitLab CI**, demonstrando como os mesmos conceitos se traduzem entre plataformas.
+
+| Conceito | GitHub Actions | GitLab CI |
+|----------|---------------|-----------|
+| Trigger por push | `on: push` | automático (sem declaração) |
+| Máquina de execução | `runs-on: ubuntu-latest` | `image: playwright:jammy` (Docker) |
+| Checkout | `actions/checkout@v4` | automático |
+| Configurar Node.js | `actions/setup-node@v4` | já incluso na imagem |
+| Artefatos | `upload-artifact@v4` | `artifacts: paths:` |
+| Relatório de testes | via action de terceiros | `reports: junit:` (nativo na UI de MR) |
+| Publicar site | GitHub Pages via action | `pages:` job especial (automático) |
+| Dependência entre jobs | implícita por `needs:` | `needs:` + `stages:` |
+| Cache | `cache: npm` na action | `cache: paths:` por branch |
+
+**Diferença fundamental:** no GitHub Actions o runner instala as ferramentas do zero; no GitLab CI partimos de uma **imagem Docker** já especializada com Playwright, Node.js e os browsers pré-instalados.
+
+---
+
+### Exercício 2 — Actions do GitHub Marketplace
+
+Arquivo: [`.github/workflows/02-com-relatorio.yml`](.github/workflows/02-com-relatorio.yml)
+
+Demonstra o uso de 3 actions do [GitHub Marketplace](https://github.com/marketplace?type=actions) para enriquecer o fluxo de QA:
+
+| Action | Função |
+|--------|--------|
+| [`test-summary/action@v2`](https://github.com/marketplace/actions/test-summary) | Exibe resumo ✅/❌ diretamente no painel do Actions run, sem abrir logs |
+| [`simple-elf/allure-report-action`](https://github.com/marketplace/actions/allure-report-with-history) | Gera relatório Allure HTML com gráfico de tendência histórica |
+| [`peaceiris/actions-gh-pages`](https://github.com/marketplace/actions/github-pages-action) | Publica o relatório no GitHub Pages com URL pública permanente |
+
+> **Pré-requisito GitHub Pages:** `Settings → Pages → Source: Deploy from branch → gh-pages → / (root)`
+
+---
+
+### Exercício 3 — Self-Hosted Runner
+
+Arquivo: [`.github/workflows/03-self-hosted.yml`](.github/workflows/03-self-hosted.yml)
+
+#### Por que é necessário?
+
+Os testes em `local-app.spec.ts` acessam `http://localhost:3000`. Um runner cloud (ubuntu-latest) está em um datacenter remoto e jamais alcançaria o localhost da sua máquina. O self-hosted runner roda **na sua própria máquina**, onde o app Express também é iniciado.
+
+#### Quando usar self-hosted runner?
+
+| Cenário | Motivo |
+|---------|--------|
+| Banco de dados / API interna sem acesso público | Runner na mesma rede |
+| Hardware específico (GPU, dispositivo físico, leitor biométrico) | Controle do ambiente |
+| Compliance (código não pode sair da rede corporativa) | Saúde, bancos, governo |
+| Cache persistente entre builds | `node_modules` mantido → build 5× mais rápido |
+| Testes de performance com rede controlada | Máquina dedicada |
+
+#### Plataformas equivalentes
+
+| Plataforma | Recurso |
+|-----------|---------|
+| Jenkins | Agents / Nodes (conceito original, criado em 2004) |
+| GitLab CI | Self-hosted GitLab Runner |
+| Azure DevOps | Self-hosted Agent (organizado em pools) |
+| CircleCI | Self-hosted Runner |
+| Bitbucket | Bitbucket Runners |
+
+#### Como registrar o runner
+
+1. No GitHub: `Settings → Actions → Runners → New self-hosted runner`
+2. Escolher o SO e seguir os comandos de instalação
+3. Executar o agente na sua máquina: `./run.sh` (Linux/Mac) ou `run.cmd` (Windows)
+4. Verificar que o runner aparece como **Idle** no GitHub
+
+---
+
+### Extra — Testes Paralelos com Matrix + Sharding
+
+Arquivo: [`.github/workflows/04-paralelo.yml`](.github/workflows/04-paralelo.yml)
+
+#### O problema
+
+À medida que a suíte cresce, executar todos os testes em sequência aumenta o tempo de feedback. Com 500 testes demorando 1s cada, um único job levaria ~8 minutos.
+
+#### A solução: sharding
+
+O Playwright suporta o flag `--shard=N/TOTAL` que divide os specs igualmente entre N fatias. Combinado com a **matrix strategy** do GitHub Actions, cada fatia roda em um job independente e simultâneo:
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/questionxfull/pgats-ci.git
-git branch -M main
-git push -uf origin main
+┌─────────────────────────────────────────────┐
+│            push para main                   │
+└──────────────┬──────────────────────────────┘
+               │ dispara 3 jobs em paralelo
+       ┌───────┼───────┐
+       ▼       ▼       ▼
+  Shard 1   Shard 2  Shard 3      ← rodam simultaneamente
+  (1/3 dos  (1/3 dos (1/3 dos
+   testes)   testes)  testes)
+       └───────┬───────┘
+               │ todos terminam
+               ▼
+       Consolidar Relatório        ← mescla os 3 blobs em 1 HTML
 ```
 
-## Integrate with your tools
+#### Ganho de tempo
 
-* [Set up project integrations](https://gitlab.com/questionxfull/pgats-ci/-/settings/integrations)
+| Configuração | Tempo estimado (200 testes) |
+|-------------|----------------------------|
+| 1 job sequencial | ~4 min |
+| 3 shards paralelos | ~1.5 min |
+| 5 shards paralelos | ~1 min |
 
-## Collaborate with your team
+---
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Estrutura do Projeto
 
-## Test and Deploy
+```
+pgats-ci/
+├── .github/
+│   └── workflows/
+│       ├── 01-execucao-cloud.yml   # Pipeline base (runner cloud)
+│       ├── 02-com-relatorio.yml    # Allure + GitHub Pages
+│       ├── 03-self-hosted.yml      # Self-hosted runner
+│       └── 04-paralelo.yml         # Matrix + Sharding
+├── .gitlab-ci.yml                  # Exercício 1: GitLab CI
+├── app/
+│   └── server.ts                   # App Express de demonstração
+├── tests/
+│   ├── public-api.spec.ts          # Testes de API pública (JSONPlaceholder)
+│   └── local-app.spec.ts           # Testes UI + API do app interno
+├── playwright.config.ts            # Config para runner cloud
+├── playwright.local.config.ts      # Config para self-hosted (com webServer)
+└── package.json
+```
 
-Use the built-in continuous integration in GitLab.
+## Como Executar Localmente
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+```bash
+# instalar dependências
+npm install
 
-***
+# instalar browsers do Playwright
+npx playwright install chromium
 
-# Editing this README
+# rodar testes de API pública (não precisa do app rodando)
+npm test
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+# rodar TODOS os testes, incluindo os do app interno
+# o Playwright sobe e derruba o servidor automaticamente
+npm run test:local
 
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+# gerar e abrir relatório Allure
+npm run allure:generate
+npm run allure:open
+```

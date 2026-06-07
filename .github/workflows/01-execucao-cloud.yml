@@ -3,6 +3,7 @@
 #
 # Conceitos demonstrados:
 #   - triggers: quando a pipeline dispara (push, PR e manual)
+#   - concurrency: cancela runs obsoletos do mesmo branch ao receber novo push
 #   - jobs: unidade de trabalho com máquina própria
 #   - runs-on: runner cloud gerenciado pelo GitHub (ubuntu-latest)
 #   - steps: sequência de comandos dentro do job
@@ -22,6 +23,12 @@ on:
 
   # disparo manual pela interface do GitHub Actions
   workflow_dispatch:
+
+# cancela a execução anterior do mesmo branch/PR quando um novo push chega
+# evita desperdício de minutos de CI com builds que já ficaram obsoletos
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # tarefas da pipeline
 jobs:

@@ -51,6 +51,9 @@ jobs:
     # em vez de usar a infraestrutura cloud do GitHub
     runs-on: self-hosted
 
+    # tempo máximo para o job inteiro — evita runners travados consumindo recursos
+    timeout-minutes: 30
+
     steps:
       # clonar o repositório na máquina do runner
       - name: Checkout do código
