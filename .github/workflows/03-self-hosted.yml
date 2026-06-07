@@ -86,11 +86,12 @@ jobs:
         run: npm run test:local
 
       # gerar relatório Allure localmente
-      # chamamos o binário diretamente para evitar problemas de PATH no Windows
-      # o allure-commandline instala o executável em node_modules/.bin/allure.cmd
+      # & é o operador de chamada do PowerShell para executar .cmd com caminho relativo
+      # continue-on-error: true pois allure-results pode estar vazio se os testes falharam
       - name: Gerar Allure Report
         if: always()
-        run: node_modules\.bin\allure generate allure-results --clean -o allure-report
+        continue-on-error: true
+        run: & ".\node_modules\.bin\allure.cmd" generate allure-results --clean -o allure-report
 
       # publicar relatório HTML do Playwright como artefato
       - name: Upload relatório HTML do Playwright
