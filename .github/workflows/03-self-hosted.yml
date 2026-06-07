@@ -48,10 +48,7 @@ jobs:
 
     defaults:
       run:
-        # garante que todos os steps usam cmd.exe no Windows
-        # evita conflito com política de execução do PowerShell no self-hosted
         shell: cmd
-        working-directory: ${{ github.workspace }}
 
     steps:
       - name: Checkout do código
@@ -74,10 +71,13 @@ jobs:
       - name: Executar todos os testes (API pública + App interno)
         run: npm run test:local
 
-      # allure-commandline requer Java — disponível na máquina do runner
+      # allure-commandline requer Java — JAVA_HOME aponta para jdk-23
       - name: Gerar Allure Report
         if: always()
-        run: npm run allure:generate
+        shell: powershell
+        run: |
+          $env:JAVA_HOME = "C:\Program Files\Java\jdk-23"
+          npm run allure:generate
 
       - name: Upload relatório HTML do Playwright
         if: always()
