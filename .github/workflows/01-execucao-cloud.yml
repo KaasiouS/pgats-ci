@@ -1,0 +1,72 @@
+# Pipeline base — execução em runner cloud do GitHub
+# Este arquivo é a referência que será replicada no GitLab CI (Exercício 1)
+#
+# Conceitos demonstrados:
+#   - triggers: quando a pipeline dispara (push, PR e manual)
+#   - jobs: unidade de trabalho com máquina própria
+#   - runs-on: runner cloud gerenciado pelo GitHub (ubuntu-latest)
+#   - steps: sequência de comandos dentro do job
+#   - actions do Marketplace: checkout, setup-node, upload-artifact
+
+name: "01 - Execução Cloud"
+
+# gatilhos / triggers — quando a pipeline vai disparar
+on:
+  # disparo automático a cada push na branch main
+  push:
+    branches: [main]
+
+  # disparo automático a cada pull request para a main
+  pull_request:
+    branches: [main]
+
+  # disparo manual pela interface do GitHub Actions
+  workflow_dispatch:
+
+# tarefas da pipeline
+jobs:
+
+  # executa os testes que não dependem de infraestrutura local
+  # esses testes funcionam em qualquer runner — cloud ou self-hosted
+  testes-api-publica:
+    name: Testes API Pública (JSONPlaceholder)
+
+    # máquina onde o job vai rodar
+    # ubuntu-latest = runner cloud gerenciado pelo GitHub
+    # criado limpo a cada execução e destruído ao terminar
+    runs-on: ubuntu-latest
+
+    steps:
+      # clonar o repositório dentro do runner
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # configurar o Node.js na versão correta
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # instalar as dependências do projeto
+      - name: Instalar dependências
+        run: npm ci
+
+      # baixar os binários do Chromium para o Playwright
+      # --with-deps instala as libs de sistema necessárias no Linux
+      - name: Instalar browsers do Playwright
+        run: npx playwright install --with-deps chromium
+
+      # executar os testes (usa playwright.config.ts — só testes de API pública)
+      - name: Executar testes
+        run: npm test
+
+      # publicar o relatório HTML como artefato da pipeline
+      # disponível para download na aba Actions do GitHub
+      - name: Upload do relatório HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 7

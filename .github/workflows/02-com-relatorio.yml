@@ -1,0 +1,127 @@
+# Exercício 2 — Actions do GitHub Marketplace
+#
+# O Marketplace oferece milhares de actions prontas para uso.
+# Neste workflow escolhemos 3 actions que agregam valor ao fluxo de QA:
+#
+#   1. test-summary/action@v2
+#      → Lê o JUnit XML gerado pelo Playwright e exibe um resumo
+#        de ✅ passou / ❌ falhou direto no painel do Actions run,
+#        sem precisar abrir os logs ou baixar artefatos.
+#
+#   2. simple-elf/allure-report-action
+#      → Gera o relatório HTML do Allure com gráfico de tendência
+#        histórica (quantos testes passaram/falharam ao longo do tempo).
+#        O Allure é o padrão de mercado para relatórios de automação.
+#
+#   3. peaceiris/actions-gh-pages
+#      → Publica o relatório gerado no GitHub Pages, disponibilizando
+#        uma URL pública permanente para o histórico de execuções.
+#
+# Pré-requisito para o GitHub Pages:
+#   Settings → Pages → Source: Deploy from branch → gh-pages → / (root)
+
+name: "02 - Com Relatório (Allure + GitHub Pages)"
+
+# gatilhos / triggers
+on:
+  # disparo automático a cada push na main
+  push:
+    branches: [main]
+
+  # disparo manual
+  workflow_dispatch:
+
+# permissão necessária para o job publicar no gh-pages
+permissions:
+  contents: write
+
+jobs:
+
+  testes-com-relatorio:
+    name: Testes + Allure Report + GitHub Pages
+
+    # runner cloud do GitHub
+    runs-on: ubuntu-latest
+
+    steps:
+      # clonar o repositório
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # configurar Node.js
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # instalar dependências do projeto
+      - name: Instalar dependências
+        run: npm ci
+
+      # instalar o browser Chromium para o Playwright
+      - name: Instalar browsers do Playwright
+        run: npx playwright install --with-deps chromium
+
+      # executar os testes
+      # continue-on-error: true → a pipeline continua mesmo com falhas,
+      # para que o relatório seja gerado e publicado de qualquer forma
+      - name: Executar testes
+        run: npm test
+        continue-on-error: true
+
+      # ─── Action 1 do Marketplace: test-summary/action ────────────────
+      # Lê o arquivo JUnit XML e exibe o resumo de pass/fail
+      # diretamente na interface do Actions, sem precisar baixar nada
+      - name: Publicar resumo de testes no painel do Actions
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          paths: test-results/junit.xml
+          show: all
+
+      # busca o histórico de relatórios anteriores (branch gh-pages)
+      # para que o Allure exiba a linha do tempo de execuções
+      # continue-on-error: true pois na primeira execução gh-pages não existe
+      - name: Buscar histórico Allure (branch gh-pages)
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      # ─── Action 2 do Marketplace: simple-elf/allure-report-action ────
+      # Converte os resultados XML do Allure em relatório HTML interativo
+      # com gráfico de tendência das últimas execuções
+      - name: Gerar Allure Report com histórico de execuções
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: allure-results
+          allure_history: allure-history
+          github_repo: ${{ github.repository }}
+          github_run_id: ${{ github.run_id }}
+          github_run_num: ${{ github.run_number }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          keep_reports: 20
+
+      # ─── Action 3 do Marketplace: peaceiris/actions-gh-pages ─────────
+      # Publica o relatório HTML no GitHub Pages
+      # URL do relatório: https://<usuario>.github.io/<repositorio>
+      - name: Publicar relatório no GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+
+      # também disponibiliza como artefato para download direto
+      - name: Upload Allure Report como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-${{ github.run_number }}
+          path: allure-history/${{ github.run_number }}/
+          retention-days: 30

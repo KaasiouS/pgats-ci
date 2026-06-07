@@ -1,0 +1,117 @@
+# Exercício 1 — Replicando a pipeline no GitLab CI
+#
+# Por que GitLab CI?
+#   O GitLab CI é uma das ferramentas mais populares de CI/CD do mercado,
+#   amplamente usada em empresas que hospedam código no gitlab.com ou em
+#   instâncias self-hosted. A sintaxe YAML é similar ao GitHub Actions,
+#   o que facilita a migração e comparação de conceitos.
+#
+# Comparativo de conceitos: GitHub Actions → GitLab CI
+# ─────────────────────────────────────────────────────────────────────
+# on: push / pull_request       →  disparo por push/MR (automático no GitLab)
+# jobs:                         →  jobs dentro de stages
+# runs-on: ubuntu-latest        →  image: (imagem Docker do job)
+# uses: actions/checkout@v4     →  checkout automático (não precisa declarar)
+# uses: actions/setup-node@v4   →  Node já disponível na imagem Playwright
+# if: always()                  →  when: always
+# uses: upload-artifact@v4      →  artifacts: paths:
+# (sem equivalente direto)      →  stages: define ordem de execução dos grupos
+# (sem equivalente direto)      →  needs: dependência explícita entre jobs (DAG)
+# (sem equivalente direto)      →  cache: por branch ($CI_COMMIT_REF_SLUG)
+# (sem equivalente direto)      →  reports: junit → relatório nativo na UI de MR
+# (sem equivalente direto)      →  pages: job especial → GitLab Pages automático
+#
+# Diferença importante:
+#   No GitHub Actions, o runner parte de um ubuntu-latest e INSTALA as ferramentas.
+#   No GitLab CI, o runner parte de uma imagem Docker já especializada.
+#   Aqui usamos a imagem oficial do Playwright que já tem Node.js e os browsers.
+
+# imagem Docker base para todos os jobs
+# a imagem oficial do Playwright já vem com Node.js, Chromium, Firefox e WebKit
+image: mcr.microsoft.com/playwright:v1.47.0-jammy
+
+# stages definem a ordem de execução dos grupos de jobs
+# jobs em stages diferentes rodam sequencialmente
+# jobs no mesmo stage rodam em paralelo
+stages:
+  - install
+  - test
+  - report
+
+# variáveis de ambiente disponíveis em todos os jobs
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"  # cache do npm na pasta do projeto
+  PW_TEST_HTML_REPORT_OPEN: "never"         # não abre o browser com o relatório
+
+# cache de dependências — reutilizado entre execuções da mesma branch
+# evita baixar o node_modules do zero a cada pipeline
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .npm/
+    - node_modules/
+
+# ── Stage 1: install ─────────────────────────────────────────────────
+
+instalar-dependencias:
+  stage: install
+  script:
+    - npm ci
+  # artifacts: arquivos passados para o próximo stage
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+
+# ── Stage 2: test ────────────────────────────────────────────────────
+
+testes-api-publica:
+  stage: test
+  # needs: declara dependência explícita (DAG — Directed Acyclic Graph)
+  # garante que este job só inicia após instalar-dependencias
+  needs: [instalar-dependencias]
+  script:
+    - npx playwright install chromium
+    - npm test
+  artifacts:
+    when: always  # salva artefatos mesmo se o job falhar
+    paths:
+      - playwright-report/
+      - allure-results/
+      - test-results/
+    expire_in: 7 days
+    # reports: junit integra os resultados na interface do GitLab
+    # mostra ✅/❌ diretamente na tela do Merge Request
+    reports:
+      junit: test-results/junit.xml
+
+# ── Stage 3: report ──────────────────────────────────────────────────
+
+gerar-allure-report:
+  stage: report
+  needs: [testes-api-publica]
+  script:
+    - npm run allure:generate
+    - echo "Relatório Allure gerado em allure-report/"
+  artifacts:
+    when: always
+    paths:
+      - allure-report/
+    expire_in: 30 days
+  only:
+    - main
+
+# Job especial "pages" — publica automaticamente no GitLab Pages
+# URL do relatório: https://<usuario>.gitlab.io/<repositorio>
+# (recurso equivalente ao GitHub Pages, sem configuração adicional)
+pages:
+  stage: report
+  needs: [testes-api-publica]
+  script:
+    - npm run allure:generate
+    - mv allure-report public
+  artifacts:
+    paths:
+      - public
+  only:
+    - main

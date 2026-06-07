@@ -1,0 +1,106 @@
+# Exercício 3 — Self-Hosted Runner
+#
+# O que é um self-hosted runner?
+#   É uma máquina que você mesmo registra no GitHub para executar
+#   os jobs da sua pipeline, em vez de usar a infraestrutura cloud do GitHub.
+#   Você instala o agente do GitHub Actions na sua máquina local,
+#   em um servidor corporativo, ou em qualquer outro ambiente.
+#
+# Por que este workflow PRECISA de self-hosted runner?
+#   Os testes em local-app.spec.ts acessam http://localhost:3000.
+#   Um runner cloud (ubuntu-latest) está em um datacenter remoto e
+#   jamais conseguiria alcançar o localhost da sua máquina.
+#   O self-hosted runner roda NA SUA MÁQUINA, que é a mesma onde
+#   o webServer do Playwright sobe o app Express em localhost:3000.
+#   Resultado: testes que falhariam no cloud funcionam no self-hosted.
+#
+# Quando faz sentido usar self-hosted runner na vida real?
+#   ✅ Acesso a recursos internos: banco de dados, API interna, VPN corporativa
+#   ✅ Hardware específico: dispositivos móveis físicos, GPUs, leitores especiais
+#   ✅ Compliance: código não pode sair da rede da empresa (saúde, bancos, gov)
+#   ✅ Cache persistente: node_modules e browsers mantidos entre builds
+#      → um build que leva 5 min no cloud pode levar 30 seg no self-hosted
+#   ✅ Testes de performance: máquina dedicada com banda de rede controlada
+#
+# Quando NÃO usar:
+#   ❌ Você é responsável por manter a máquina (atualizações, segurança)
+#   ❌ O estado da máquina pode acumular "sujeira" entre execuções
+#   ❌ Para projetos open source (risco de execução de código malicioso)
+#
+# Outras plataformas com recurso equivalente:
+#   Jenkins:      Agents/Nodes   (criado em 2004 — o conceito original)
+#   GitLab CI:    Self-hosted GitLab Runner
+#   Azure DevOps: Self-hosted Agent (organizado em pools)
+#   CircleCI:     Self-hosted Runner
+#   Bitbucket:    Bitbucket Runners
+
+name: "03 - Self-Hosted Runner (App Interno)"
+
+# gatilhos / triggers
+on:
+  # disparo manual — ideal para demonstrar o runner sem necessitar de push
+  workflow_dispatch:
+
+jobs:
+
+  testes-app-local:
+    name: Testes App Interno (localhost:3000)
+
+    # a mudança fundamental: runs-on: self-hosted
+    # o GitHub vai enviar este job para um runner registrado por você,
+    # em vez de usar a infraestrutura cloud do GitHub
+    runs-on: self-hosted
+
+    steps:
+      # clonar o repositório na máquina do runner
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # configurar o Node.js (o runner pode já ter uma versão instalada,
+      # mas esta action garante a versão exata do projeto)
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # instalar dependências
+      # em runners self-hosted, o node_modules pode ser cacheado entre builds
+      - name: Instalar dependências
+        run: npm ci
+
+      # instalar o browser Chromium para o Playwright
+      # sem --with-deps pois as dependências de sistema já estão na máquina
+      - name: Instalar browsers do Playwright
+        run: npx playwright install chromium
+
+      # executar TODOS os testes usando o config local
+      # o playwright.local.config.ts tem webServer configurado:
+      #   → sobe o app Express em localhost:3000 antes dos testes
+      #   → derruba automaticamente ao terminar
+      # isso inclui: public-api.spec.ts + local-app.spec.ts
+      # o local-app.spec.ts FALHA em runners cloud — funciona aqui
+      - name: Executar todos os testes (API pública + App interno)
+        run: npm run test:local
+
+      # gerar relatório Allure localmente
+      - name: Gerar Allure Report
+        if: always()
+        run: npm run allure:generate
+
+      # publicar relatório HTML do Playwright como artefato
+      - name: Upload relatório HTML do Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-self-hosted-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 7
+
+      # publicar relatório Allure como artefato
+      - name: Upload Allure Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-self-hosted-${{ github.run_number }}
+          path: allure-report/
+          retention-days: 30
