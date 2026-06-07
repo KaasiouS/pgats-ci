@@ -86,13 +86,11 @@ jobs:
         run: npm run test:local
 
       # gerar relatório Allure localmente
-      # Bypass -Scope Process: libera scripts apenas para este step,
-      # sem alterar política global do Windows
+      # chamamos o binário diretamente para evitar problemas de PATH no Windows
+      # o allure-commandline instala o executável em node_modules/.bin/allure.cmd
       - name: Gerar Allure Report
         if: always()
-        run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          npm run allure:generate
+        run: node_modules\.bin\allure generate allure-results --clean -o allure-report
 
       # publicar relatório HTML do Playwright como artefato
       - name: Upload relatório HTML do Playwright
