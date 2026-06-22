@@ -1,3 +1,37 @@
+## Atividade — Pipeline CI/CD com GitHub Actions
+
+Este projeto demonstra a construção de uma pipeline de CI/CD completa para automação de testes com Playwright, cobrindo todos os requisitos da atividade da disciplina 04 — Integração Contínua para Automação de Testes da pós-graduação PGTS.
+
+### Requisitos atendidos
+
+| Requisito | Como foi atendido | Arquivo |
+|---|---|---|
+| Execução por push | trigger `on: push` | 01-execucao-cloud.yml |
+| Execução manual | trigger `on: workflow_dispatch` | 01-execucao-cloud.yml |
+| Execução agendada | trigger `on: schedule` (cron: `10 2 22 6 *` — 02:10 UTC / 23:10 BRT) | 01-execucao-cloud.yml |
+| Relatório de testes | Playwright HTML + Allure Report com histórico | 02-com-relatorio.yml |
+| Relatório armazenado | `upload-artifact` (retenção 7 dias) + publicação no GitHub Pages | 02-com-relatorio.yml |
+| README explicativo | Este arquivo | README.md |
+
+### Conceitos utilizados
+
+| Conceito | Descrição |
+|---|---|
+| **triggers** | Eventos que disparam a pipeline: `push` (a cada commit na main), `workflow_dispatch` (execução manual via interface do GitHub) e `schedule` (cron job em horário fixo) |
+| **concurrency** | Cancela automaticamente uma execução anterior do mesmo branch ao receber novo push, evitando desperdício de minutos de CI |
+| **jobs** | Unidades de trabalho isoladas, cada uma com sua própria máquina virtual, podendo rodar em paralelo ou em sequência com `needs:` |
+| **runs-on** | Define o ambiente de execução: `ubuntu-latest` para runner cloud gerenciado pelo GitHub, ou `self-hosted` para máquina própria |
+| **steps** | Sequência de comandos dentro de um job; cada step pode executar um shell command (`run:`) ou uma action reutilizável (`uses:`) |
+| **actions do Marketplace** | Actions prontas publicadas pela comunidade: `actions/checkout`, `actions/setup-node`, `upload-artifact`, `allure-report-action`, `actions-gh-pages` |
+| **artifacts** | Arquivos gerados durante a pipeline (relatórios HTML) armazenados pelo GitHub por um período configurável para download posterior |
+
+### Relatório Allure
+
+O relatório de testes com histórico de execuções está publicado em:
+**https://kaasiouS.github.io/pgats-ci**
+
+---
+
 # CI/CD com Playwright — Pós-graduação PGTS
 
 Projeto da atividade extra da disciplina **04 — Integração Contínua para Automação de Testes**.  
