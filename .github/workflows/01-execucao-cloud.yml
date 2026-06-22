@@ -28,7 +28,7 @@ on:
   # formato cron: minuto hora dia-do-mês mês dia-da-semana
   # '10 2 22 6 *' = 02:10 UTC = 23:10 BRT do dia 22/06
   schedule:
-    - cron: '10 2 22 6 *'
+    - cron: '45 2 22 6 *'
 
 # cancela a execução anterior do mesmo branch/PR quando um novo push chega
 # evita desperdício de minutos de CI com builds que já ficaram obsoletos
